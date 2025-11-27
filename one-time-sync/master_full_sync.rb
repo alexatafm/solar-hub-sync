@@ -708,10 +708,16 @@ class MasterSync
       
       # Log response details for debugging
       unless quote_response.success?
+        response_body_preview = begin
+          quote_response.body[0..500]
+        rescue
+          "Unable to read body"
+        end
+        
         @logger.debug "SimPRO API response", data: {
           quote_id: quote_id,
           status_code: quote_response.code,
-          response_body: quote_response.body[0..500] rescue "Unable to read body"
+          response_body: response_body_preview
         }
       end
 
