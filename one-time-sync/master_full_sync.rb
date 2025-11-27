@@ -422,6 +422,28 @@ ENV['RUBY_DEBUG_SKIP'] = '1'
 # Load Rails environment
 require_relative '../config/environment'
 
+# Verify CSV file exists immediately after Rails loads
+csv_file = 'hubspot-crm-exports-all-deals-2025-11-28.csv'
+script_dir = File.dirname(File.expand_path(__FILE__))
+csv_path = File.join(script_dir, csv_file)
+app_csv_path = File.join(Rails.root, 'one-time-sync', csv_file)
+
+if File.exist?(csv_path)
+  puts "[DEBUG] CSV found at: #{csv_path}"
+elsif File.exist?(app_csv_path)
+  puts "[DEBUG] CSV found at: #{app_csv_path}"
+else
+  puts "[DEBUG] CSV NOT FOUND!"
+  puts "[DEBUG] Script dir: #{script_dir}"
+  puts "[DEBUG] Rails root: #{Rails.root}"
+  puts "[DEBUG] Current dir: #{Dir.pwd}"
+  puts "[DEBUG] Script dir contents: #{Dir.entries(script_dir).select { |f| f.end_with?('.csv') }.inspect}"
+  puts "[DEBUG] Rails root/one-time-sync exists: #{Dir.exist?(File.join(Rails.root, 'one-time-sync'))}"
+  if Dir.exist?(File.join(Rails.root, 'one-time-sync'))
+    puts "[DEBUG] Rails root/one-time-sync contents: #{Dir.entries(File.join(Rails.root, 'one-time-sync')).select { |f| f.end_with?('.csv') }.inspect}"
+  end
+end
+
 class MasterSync
   def initialize(config, logger)
     @config = config
@@ -462,53 +484,53 @@ class MasterSync
   private
   
   def load_deals_from_csv
-    # Resolve CSV file path - works for both Docker and Railway native builds
+    # Use Rails.root for absolute path resolution - most reliable
     script_dir = File.dirname(File.expand_path(__FILE__))
-    app_root = defined?(Rails) ? Rails.root.to_s : File.expand_path(File.join(script_dir, '..'))
-    current_dir = Dir.pwd
+    app_root = Rails.root.to_s
     
-    # Try paths in order of likelihood - prioritize script directory first
+    # Try paths in order of likelihood - use absolute paths
     tried_paths = [
       File.join(script_dir, @config.csv_file),                  # Same dir as script (most likely)
-      File.join(current_dir, 'one-time-sync', @config.csv_file), # Current dir/one-time-sync
-      File.join(app_root, 'one-time-sync', @config.csv_file),  # App root/one-time-sync
-      File.join(current_dir, @config.csv_file),                 # Current dir
-      File.join(app_root, @config.csv_file),                    # App root
+      File.join(app_root, 'one-time-sync', @config.csv_file),   # Rails root/one-time-sync (absolute)
+      File.join(app_root, @config.csv_file),                    # Rails root (absolute)
+      File.join(Dir.pwd, 'one-time-sync', @config.csv_file),    # Current dir/one-time-sync
+      File.join(Dir.pwd, @config.csv_file),                     # Current dir
       @config.csv_file,                                         # Direct path
-      File.join(script_dir, '..', @config.csv_file),           # Parent of script dir
-      File.expand_path(@config.csv_file, script_dir)           # Expanded from script dir
     ]
     
-    csv_path = tried_paths.find { |path| File.exist?(path) }
+    csv_path = tried_paths.find { |path| File.exist?(path) && File.file?(path) }
     
-    unless csv_path && File.exist?(csv_path)
-      # Debug: list what files exist in key directories
+    unless csv_path
+      # Comprehensive debugging
       debug_info = {
         csv_file: @config.csv_file,
         script_dir: script_dir,
         app_root: app_root,
-        current_dir: current_dir,
-        tried_paths: tried_paths
+        current_dir: Dir.pwd,
+        tried_paths: tried_paths.map { |p| "#{p} (exists: #{File.exist?(p)})" }
       }
       
-      # Try to list directory contents for debugging
       begin
         debug_info[:script_dir_exists] = Dir.exist?(script_dir)
-        debug_info[:script_dir_contents] = Dir.entries(script_dir).select { |f| f.end_with?('.csv') } if Dir.exist?(script_dir)
+        debug_info[:script_dir_contents] = Dir.entries(script_dir).select { |f| f.end_with?('.csv') || File.directory?(File.join(script_dir, f)) } if Dir.exist?(script_dir)
+        
         one_time_sync_path = File.join(app_root, 'one-time-sync')
         debug_info[:one_time_sync_dir] = one_time_sync_path
         debug_info[:one_time_sync_dir_exists] = Dir.exist?(one_time_sync_path)
         debug_info[:one_time_sync_contents] = Dir.entries(one_time_sync_path).select { |f| f.end_with?('.csv') } if Dir.exist?(one_time_sync_path)
-        debug_info[:current_dir_contents] = Dir.entries(current_dir).select { |f| f.end_with?('.csv') || f == 'one-time-sync' } if Dir.exist?(current_dir)
+        
+        debug_info[:app_root_contents] = Dir.entries(app_root).select { |f| f == 'one-time-sync' || f.end_with?('.csv') } if Dir.exist?(app_root)
+        debug_info[:current_dir_contents] = Dir.entries(Dir.pwd).select { |f| f == 'one-time-sync' || f.end_with?('.csv') } if Dir.exist?(Dir.pwd)
       rescue => e
         debug_info[:dir_listing_error] = e.message
+        debug_info[:dir_listing_backtrace] = e.backtrace.first(3)
       end
       
       @logger.error "CSV file not found", data: debug_info
-      raise "CSV file not found: #{@config.csv_file} (tried: #{tried_paths.join(', ')})"
+      raise "CSV file not found: #{@config.csv_file}\nTried paths:\n#{tried_paths.map { |p| "  - #{p} (#{File.exist?(p) ? 'EXISTS' : 'NOT FOUND'})" }.join("\n")}\n\nDebug info: #{debug_info.inspect}"
     end
     
-    @logger.info "Found CSV file", data: { csv_path: csv_path, file_size: File.size(csv_path) }
+    @logger.info "Found CSV file", data: { csv_path: csv_path, file_size: File.size(csv_path), absolute_path: File.expand_path(csv_path) }
     
     deals = []
     seen_quote_ids = {}
