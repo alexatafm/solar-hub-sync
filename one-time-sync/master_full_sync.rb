@@ -750,9 +750,9 @@ class MasterSync
       
       timeline_data = timeline_response.success? ? timeline_response.parsed_response : nil
       
-      # Perform sync
+      # Perform sync - pass deal_id to ensure we update the correct deal (not just first match)
       quote_data = quote_response.parsed_response
-      Hubspot::Deal.update_deal_value(quote_data, timeline_data)
+      Hubspot::Deal.update_deal_value(quote_data, timeline_data, deal_id)
       
       @logger.increment(:deals_synced)
       @logger.success "Quote synced successfully", data: { deal_id: deal_id, quote_id: quote_id }

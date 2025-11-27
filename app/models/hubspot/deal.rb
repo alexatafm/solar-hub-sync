@@ -103,9 +103,21 @@ module Hubspot
     end
 
 
-  def self.update_deal_value(quote,timeline_data)
+  def self.update_deal_value(quote,timeline_data,deal_id=nil)
 
-    existing_deal =  Hubspot::Deal.find_deal(quote["ID"])
+    # If deal_id is provided, use it directly (for CSV-based sync)
+    # Otherwise, search by quote_id (for webhook-based sync)
+    if deal_id.present?
+      # Verify the deal exists and has the correct quote_id
+      deal_response = HTTParty.get("#{DEAL_PATH}/#{deal_id}", query: { properties: 'simpro_quote_id' }, headers: { 'Content-Type' => 'application/json',"Authorization" => "Bearer #{ENV['HUBSPOT_ACCESS_TOKEN']}" })
+      if deal_response.success? && deal_response['properties']
+        existing_deal = { "results" => [{ "id" => deal_id, "properties" => deal_response['properties'] }] }
+      else
+        existing_deal = { "results" => [] }
+      end
+    else
+      existing_deal =  Hubspot::Deal.find_deal(quote["ID"])
+    end
     deal_id = existing_deal["results"].first["id"] rescue nil
     lost_reason = quote["ArchiveReason"]["ArchiveReason"] rescue ""
     createdate = quote["DateIssued"].to_date.midnight.to_time.to_i*1000  rescue ""
