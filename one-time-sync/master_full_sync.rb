@@ -507,37 +507,37 @@ class MasterSync
       ]
       
       csv_path = tried_paths.find { |path| File.exist?(path) && File.file?(path) }
-    
-    unless csv_path
-      # Comprehensive debugging
-      debug_info = {
-        csv_file: @config.csv_file,
-        script_dir: script_dir,
-        app_root: app_root,
-        current_dir: Dir.pwd,
-        tried_paths: tried_paths.map { |p| "#{p} (exists: #{File.exist?(p)})" }
-      }
       
-      begin
-        debug_info[:script_dir_exists] = Dir.exist?(script_dir)
-        debug_info[:script_dir_contents] = Dir.entries(script_dir).select { |f| f.end_with?('.csv') || File.directory?(File.join(script_dir, f)) } if Dir.exist?(script_dir)
+      unless csv_path
+        # Comprehensive debugging
+        debug_info = {
+          csv_file: @config.csv_file,
+          script_dir: script_dir,
+          app_root: app_root,
+          current_dir: Dir.pwd,
+          tried_paths: tried_paths.map { |p| "#{p} (exists: #{File.exist?(p)})" }
+        }
         
-        one_time_sync_path = File.join(app_root, 'one-time-sync')
-        debug_info[:one_time_sync_dir] = one_time_sync_path
-        debug_info[:one_time_sync_dir_exists] = Dir.exist?(one_time_sync_path)
-        debug_info[:one_time_sync_contents] = Dir.entries(one_time_sync_path).select { |f| f.end_with?('.csv') } if Dir.exist?(one_time_sync_path)
+        begin
+          debug_info[:script_dir_exists] = Dir.exist?(script_dir)
+          debug_info[:script_dir_contents] = Dir.entries(script_dir).select { |f| f.end_with?('.csv') || File.directory?(File.join(script_dir, f)) } if Dir.exist?(script_dir)
+          
+          one_time_sync_path = File.join(app_root, 'one-time-sync')
+          debug_info[:one_time_sync_dir] = one_time_sync_path
+          debug_info[:one_time_sync_dir_exists] = Dir.exist?(one_time_sync_path)
+          debug_info[:one_time_sync_contents] = Dir.entries(one_time_sync_path).select { |f| f.end_with?('.csv') } if Dir.exist?(one_time_sync_path)
+          
+          debug_info[:app_root_contents] = Dir.entries(app_root).select { |f| f == 'one-time-sync' || f.end_with?('.csv') } if Dir.exist?(app_root)
+          debug_info[:current_dir_contents] = Dir.entries(Dir.pwd).select { |f| f == 'one-time-sync' || f.end_with?('.csv') } if Dir.exist?(Dir.pwd)
+        rescue => e
+          debug_info[:dir_listing_error] = e.message
+          debug_info[:dir_listing_backtrace] = e.backtrace.first(3)
+        end
         
-        debug_info[:app_root_contents] = Dir.entries(app_root).select { |f| f == 'one-time-sync' || f.end_with?('.csv') } if Dir.exist?(app_root)
-        debug_info[:current_dir_contents] = Dir.entries(Dir.pwd).select { |f| f == 'one-time-sync' || f.end_with?('.csv') } if Dir.exist?(Dir.pwd)
-      rescue => e
-        debug_info[:dir_listing_error] = e.message
-        debug_info[:dir_listing_backtrace] = e.backtrace.first(3)
+        @logger.error "CSV file not found", data: debug_info
+        raise "CSV file not found: #{@config.csv_file}\nTried paths:\n#{tried_paths.map { |p| "  - #{p} (#{File.exist?(p) ? 'EXISTS' : 'NOT FOUND'})" }.join("\n")}\n\nDebug info: #{debug_info.inspect}"
       end
-      
-      @logger.error "CSV file not found", data: debug_info
-      raise "CSV file not found: #{@config.csv_file}\nTried paths:\n#{tried_paths.map { |p| "  - #{p} (#{File.exist?(p) ? 'EXISTS' : 'NOT FOUND'})" }.join("\n")}\n\nDebug info: #{debug_info.inspect}"
-    end
-    end  # Close the else block
+    end  # Close the if/else block
     
     @logger.info "Found CSV file", data: { csv_path: csv_path, file_size: File.size(csv_path), absolute_path: File.expand_path(csv_path) }
     
