@@ -537,6 +537,7 @@ class MasterSync
       @logger.error "CSV file not found", data: debug_info
       raise "CSV file not found: #{@config.csv_file}\nTried paths:\n#{tried_paths.map { |p| "  - #{p} (#{File.exist?(p) ? 'EXISTS' : 'NOT FOUND'})" }.join("\n")}\n\nDebug info: #{debug_info.inspect}"
     end
+    end  # Close the else block
     
     @logger.info "Found CSV file", data: { csv_path: csv_path, file_size: File.size(csv_path), absolute_path: File.expand_path(csv_path) }
     
