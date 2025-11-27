@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["ruby_3_3", "postgresql"]
+
+[phases.install]
+cmds = [
+  "gem install bundler",
+  "bundle install"
+]
+
+[start]
+cmd = "ruby one-time-sync/master_full_sync.rb --verbose"

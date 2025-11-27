@@ -1,0 +1,81 @@
+================================================================================
+COPY-PASTE CODE FOR RAILWAY FUNCTION
+================================================================================
+
+This is the exact code to paste into Railway's function editor or deploy.
+
+FILE: railway_sync_function.rb
+LOCATION: Root directory of your project
+RUN WITH: bundle exec ruby railway_sync_function.rb
+
+--------------------------------------------------------------------------------
+ENVIRONMENT VARIABLES TO SET IN RAILWAY:
+--------------------------------------------------------------------------------
+
+Required:
+  SIMPRO_TEST_URL=https://your-instance.simprosuite.com/api/v1.0/companies/0
+  SIMPRO_TEST_KEY_ID=your_simpro_api_key_here
+  HUBSPOT_ACCESS_TOKEN=your_hubspot_token_here
+
+Optional (for control):
+  LIMIT=11582         # Number of deals to process (leave empty for all)
+  START_FROM=0        # Skip first N deals (for resuming)
+  CSV_FILE=hubspot-crm-exports-all-deals-2025-11-21.csv
+
+--------------------------------------------------------------------------------
+DEPLOYMENT STEPS:
+--------------------------------------------------------------------------------
+
+1. Create new Railway project
+2. Connect your GitHub repo OR upload files
+3. Set environment variables in Railway dashboard
+4. Upload your CSV file to the project root
+5. Deploy with: railway up
+6. Monitor logs: railway logs --follow
+
+--------------------------------------------------------------------------------
+QUICK COMMANDS:
+--------------------------------------------------------------------------------
+
+# Test locally first (5 deals)
+bundle exec ruby test_railway_function.rb
+
+# Run full sync
+bundle exec ruby railway_sync_function.rb
+
+# Run with Railway CLI
+railway run ruby railway_sync_function.rb
+
+# Check logs
+railway logs --follow
+
+--------------------------------------------------------------------------------
+LOG OUTPUT SAMPLE:
+--------------------------------------------------------------------------------
+
+[2025-11-21 15:22:32] INFO  | RAILWAY LINE ITEM SYNC v1.0.0
+[2025-11-21 15:22:32] INFO  | Started at: 2025-11-21 15:22:32
+[2025-11-21 15:22:32] INFO  | Syncing 11582 deals
+[2025-11-21 15:22:32] INFO  | [1/11582] Processing: Deal Name (Quote: 12345)
+[2025-11-21 15:22:38] INFO  | ✓ Completed in 5.5s
+[2025-11-21 15:30:45] INFO  | PROGRESS: 50/11582 | Success: 50 | Failed: 0
+[2025-11-21 15:30:45] INFO  | TIMING: Avg 5.1s | Elapsed: 4m | ETA: 16h
+
+--------------------------------------------------------------------------------
+EXPECTED RESULTS:
+--------------------------------------------------------------------------------
+
+Total Time: ~16 hours for 11,582 deals
+Success Rate: ~100% (based on testing)
+Log File: railway_sync_YYYYMMDD_HHMMSS.log
+
+Each deal will have:
+✓ All line items synced
+✓ 7 new fields populated (SKU, discount, line totals, etc.)
+✓ Primary/Optional correctly set
+✓ All 5 item types (Catalogue, One-Off, Pre-Builds, Service, Labour)
+
+================================================================================
+READY TO DEPLOY! 🚀
+================================================================================
+

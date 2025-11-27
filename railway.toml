@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "ruby one-time-sync/master_full_sync.rb --verbose"
+restartPolicyType = "never"

@@ -1,0 +1,53 @@
+# =============================================================================
+# MASTER FULL SYNC - DOCKERFILE
+# =============================================================================
+# Purpose: Docker container for running one-time full data sync from simPRO to HubSpot
+# 
+# Build:
+#   docker build -f Dockerfile.master_sync -t solar-hub-master-sync ..
+#
+# Run locally:
+#   docker run --env-file ../.env solar-hub-master-sync --verbose
+#
+# Deploy to Railway:
+#   See DEPLOYMENT_GUIDE.md
+# =============================================================================
+
+FROM ruby:3.3.1-alpine
+
+# Install dependencies
+RUN apk add --no-cache \
+    build-base \
+    postgresql-dev \
+    tzdata \
+    bash \
+    curl
+
+# Set working directory
+WORKDIR /app
+
+# Copy Gemfile and install gems
+COPY Gemfile Gemfile.lock ./
+# Install debug gem explicitly to avoid LoadError (RUBY_DEBUG_SKIP will disable it)
+RUN gem install debug -v 1.11.0 && \
+    bundle install --without development test
+
+# Copy application code
+COPY . .
+
+# Copy CSV file into container
+COPY one-time-sync/hubspot-crm-exports-all-deals-2025-11-28.csv /app/one-time-sync/hubspot-crm-exports-all-deals-2025-11-28.csv
+
+# Set timezone
+ENV TZ=Australia/Melbourne
+
+# Set a default secret_key_base for Rails (can be overridden via environment variable)
+ENV SECRET_KEY_BASE=dummy_secret_key_base_for_one_time_sync_only_not_for_production_use
+
+# Make sync script executable
+RUN chmod +x one-time-sync/master_full_sync.rb
+
+# Default command
+ENTRYPOINT ["ruby", "one-time-sync/master_full_sync.rb"]
+CMD ["--verbose"]
+

@@ -1,0 +1,47 @@
+# Rails
+/.bundle
+/.env*
+/log/*
+/tmp/*
+!/log/.keep
+!/tmp/.keep
+/tmp/pids/*
+!/tmp/pids/
+!/tmp/pids/.keep
+/storage/*
+!/storage/.keep
+/tmp/storage/*
+!/tmp/storage/
+!/tmp/storage/.keep
+/public/assets
+/config/master.key
+
+# Logs
+*.log
+logs.csv
+sync_*.log
+railway_sync_*.log
+merge_output.log
+
+# Test files
+test_*.rb
+*_test.rb
+
+# Old sync scripts
+standalone_sync*.rb
+bulk_sync*.rb
+sync_line_items*.rb
+railway_sync_function.rb
+test_*.rb
+
+# Documentation (keep main README)
+*.md
+!README.md
+
+# Build scripts
+build_*.sh
+
+# CSV exports (keep main one)
+hubspot-crm-exports-all-deals-*.csv
+!hubspot-crm-exports-all-deals-2025-11-28.csv
+
