@@ -796,6 +796,16 @@ if __FILE__ == $0
     exit 1
   end
   
+  # Validate SIMPRO_TEST_URL includes /companies/4 (required for SimPRO API)
+  unless ENV['SIMPRO_TEST_URL'].include?('/companies/')
+    logger.error "SIMPRO_TEST_URL is missing /companies/4", data: {
+      current_url: ENV['SIMPRO_TEST_URL'],
+      expected_format: "https://solarhub.simprosuite.com/api/v1.0/companies/4"
+    }
+    logger.error "All quote requests will return 404 without the company ID in the URL"
+    exit 1
+  end
+  
   # CSV file will be checked in load_deals_from_csv after Rails loads
   
   # Run sync
