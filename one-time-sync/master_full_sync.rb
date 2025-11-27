@@ -422,15 +422,18 @@ ENV['RUBY_DEBUG_SKIP'] = '1'
 # Load Rails environment
 require_relative '../config/environment'
 
-# Verify CSV file exists immediately after Rails loads
+# Verify CSV file exists immediately after Rails loads and store the path
 csv_file = 'hubspot-crm-exports-all-deals-2025-11-28.csv'
 script_dir = File.dirname(File.expand_path(__FILE__))
 csv_path = File.join(script_dir, csv_file)
 app_csv_path = File.join(Rails.root, 'one-time-sync', csv_file)
 
+# Store the verified CSV path in an environment variable so load_deals_from_csv can use it
 if File.exist?(csv_path)
+  ENV['CSV_FILE_PATH'] = csv_path
   puts "[DEBUG] CSV found at: #{csv_path}"
 elsif File.exist?(app_csv_path)
+  ENV['CSV_FILE_PATH'] = app_csv_path
   puts "[DEBUG] CSV found at: #{app_csv_path}"
 else
   puts "[DEBUG] CSV NOT FOUND!"
@@ -484,21 +487,26 @@ class MasterSync
   private
   
   def load_deals_from_csv
-    # Use Rails.root for absolute path resolution - most reliable
-    script_dir = File.dirname(File.expand_path(__FILE__))
-    app_root = Rails.root.to_s
-    
-    # Try paths in order of likelihood - use absolute paths
-    tried_paths = [
-      File.join(script_dir, @config.csv_file),                  # Same dir as script (most likely)
-      File.join(app_root, 'one-time-sync', @config.csv_file),   # Rails root/one-time-sync (absolute)
-      File.join(app_root, @config.csv_file),                    # Rails root (absolute)
-      File.join(Dir.pwd, 'one-time-sync', @config.csv_file),    # Current dir/one-time-sync
-      File.join(Dir.pwd, @config.csv_file),                     # Current dir
-      @config.csv_file,                                         # Direct path
-    ]
-    
-    csv_path = tried_paths.find { |path| File.exist?(path) && File.file?(path) }
+    # First, try the path we verified exists at startup
+    if ENV['CSV_FILE_PATH'] && File.exist?(ENV['CSV_FILE_PATH'])
+      csv_path = ENV['CSV_FILE_PATH']
+      @logger.info "Using verified CSV path from startup", data: { csv_path: csv_path }
+    else
+      # Use Rails.root for absolute path resolution - most reliable
+      script_dir = File.dirname(File.expand_path(__FILE__))
+      app_root = Rails.root.to_s
+      
+      # Try paths in order of likelihood - use absolute paths
+      tried_paths = [
+        File.join(script_dir, @config.csv_file),                  # Same dir as script (most likely)
+        File.join(app_root, 'one-time-sync', @config.csv_file),   # Rails root/one-time-sync (absolute)
+        File.join(app_root, @config.csv_file),                    # Rails root (absolute)
+        File.join(Dir.pwd, 'one-time-sync', @config.csv_file),    # Current dir/one-time-sync
+        File.join(Dir.pwd, @config.csv_file),                     # Current dir
+        @config.csv_file,                                         # Direct path
+      ]
+      
+      csv_path = tried_paths.find { |path| File.exist?(path) && File.file?(path) }
     
     unless csv_path
       # Comprehensive debugging
