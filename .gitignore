@@ -41,6 +41,10 @@ test_*.rb
 # Build scripts
 build_*.sh
 
+# Docker files (not needed for Railway Nixpacks)
+Dockerfile*
+*.dockerfile
+
 # CSV exports (keep main one)
 hubspot-crm-exports-all-deals-*.csv
 !hubspot-crm-exports-all-deals-2025-11-28.csv
