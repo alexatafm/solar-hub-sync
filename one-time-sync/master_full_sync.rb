@@ -687,14 +687,33 @@ class MasterSync
         end
       end
       
-      # Fetch quote with display=all
-      quote_response = HTTParty.get("#{ENV['SIMPRO_TEST_URL']}/quotes/#{quote_id}?display=all", {
+      # Fetch quote with display=all - use same format as Hubspot::Quote model
+      # Ensure URL doesn't have double slashes
+      base_url = ENV['SIMPRO_TEST_URL'].to_s.chomp('/')
+      quote_url = "#{base_url}/quotes/#{quote_id}?display=all"
+      
+      @logger.debug "Fetching quote from SimPRO", data: { 
+        quote_id: quote_id, 
+        url: quote_url,
+        base_url: base_url
+      }
+      
+      quote_response = HTTParty.get(quote_url, {
         headers: {
           "Content-Type" => "application/json",
           "Authorization" => "Bearer #{ENV['SIMPRO_TEST_KEY_ID']}"
         },
         timeout: 30
       })
+      
+      # Log response details for debugging
+      unless quote_response.success?
+        @logger.debug "SimPRO API response", data: {
+          quote_id: quote_id,
+          status_code: quote_response.code,
+          response_body: quote_response.body[0..500] rescue "Unable to read body"
+        }
+      end
 
       # Handle quote fetch errors gracefully
       unless quote_response.success?
