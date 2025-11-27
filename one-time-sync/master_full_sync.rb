@@ -490,16 +490,22 @@ class MasterSync
     
     deals = []
     seen_quote_ids = {}
+    total_rows = 0
+    skipped_empty = 0
+    skipped_duplicates = 0
+    
+    @logger.info "Reading CSV file", data: { csv_path: csv_path }
     
     CSV.foreach(csv_path, headers: true) do |row|
+      total_rows += 1
+      
       quote_id = row['Simpro Quote Id']&.strip
-      next if quote_id.nil? || quote_id.empty?
+      if quote_id.nil? || quote_id.empty?
+        skipped_empty += 1
+        next
+      end
       
       deal_id = row['Record ID']&.strip
-      
-      # Skip archived deals (duplicates we just merged)
-      # Batch check archived deals to avoid too many API calls
-      # We'll check during sync_quote_from_deal instead for efficiency
       
       deal = {
         record_id: deal_id,
@@ -510,6 +516,7 @@ class MasterSync
       
       # Handle duplicates based on config
       if seen_quote_ids[quote_id]
+        skipped_duplicates += 1
         case @config.handle_duplicates
         when 'skip'
           @logger.debug "Skipping duplicate quote ID", data: { quote_id: quote_id, record_id: deal[:record_id] }
@@ -525,14 +532,36 @@ class MasterSync
         seen_quote_ids[quote_id] = true
         deals << deal
       end
+      
+      # Log progress every 1000 rows
+      if total_rows % 1000 == 0
+        @logger.debug "CSV loading progress", data: { 
+          rows_processed: total_rows, 
+          deals_collected: deals.count,
+          duplicates_skipped: skipped_duplicates
+        }
+      end
     end
     
     @logger.info "Loaded deals from CSV", data: { 
-      total: deals.count, 
+      total_rows: total_rows,
+      deals_collected: deals.count,
+      skipped_empty_quote_id: skipped_empty,
+      skipped_duplicates: skipped_duplicates,
+      unique_quote_ids: seen_quote_ids.count,
       csv_file: @config.csv_file,
       csv_path: csv_path,
       duplicates_handled: @config.handle_duplicates
     }
+    
+    if deals.empty?
+      @logger.error "No deals to sync after filtering", data: {
+        total_rows: total_rows,
+        skipped_empty: skipped_empty,
+        skipped_duplicates: skipped_duplicates
+      }
+      raise "No deals to sync. Check CSV file and duplicate handling settings."
+    end
     
     deals
   end
