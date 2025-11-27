@@ -465,11 +465,14 @@ class MasterSync
     # Resolve CSV file path - works for both Docker and Railway native builds
     script_dir = File.dirname(File.expand_path(__FILE__))
     app_root = defined?(Rails) ? Rails.root.to_s : File.expand_path(File.join(script_dir, '..'))
+    current_dir = Dir.pwd
     
-    # Try paths in order of likelihood
+    # Try paths in order of likelihood - prioritize script directory first
     tried_paths = [
       File.join(script_dir, @config.csv_file),                  # Same dir as script (most likely)
+      File.join(current_dir, 'one-time-sync', @config.csv_file), # Current dir/one-time-sync
       File.join(app_root, 'one-time-sync', @config.csv_file),  # App root/one-time-sync
+      File.join(current_dir, @config.csv_file),                 # Current dir
       File.join(app_root, @config.csv_file),                    # App root
       @config.csv_file,                                         # Direct path
       File.join(script_dir, '..', @config.csv_file),           # Parent of script dir
@@ -484,16 +487,19 @@ class MasterSync
         csv_file: @config.csv_file,
         script_dir: script_dir,
         app_root: app_root,
-        current_dir: Dir.pwd,
+        current_dir: current_dir,
         tried_paths: tried_paths
       }
       
       # Try to list directory contents for debugging
       begin
+        debug_info[:script_dir_exists] = Dir.exist?(script_dir)
         debug_info[:script_dir_contents] = Dir.entries(script_dir).select { |f| f.end_with?('.csv') } if Dir.exist?(script_dir)
         one_time_sync_path = File.join(app_root, 'one-time-sync')
         debug_info[:one_time_sync_dir] = one_time_sync_path
+        debug_info[:one_time_sync_dir_exists] = Dir.exist?(one_time_sync_path)
         debug_info[:one_time_sync_contents] = Dir.entries(one_time_sync_path).select { |f| f.end_with?('.csv') } if Dir.exist?(one_time_sync_path)
+        debug_info[:current_dir_contents] = Dir.entries(current_dir).select { |f| f.end_with?('.csv') || f == 'one-time-sync' } if Dir.exist?(current_dir)
       rescue => e
         debug_info[:dir_listing_error] = e.message
       end
