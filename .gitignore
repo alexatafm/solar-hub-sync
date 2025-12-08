@@ -1,0 +1,32 @@
+# Log files
+*.log
+sync_*.log
+sync_*_report.csv
+merge_output.log
+
+# CSV exports (exclude from tracking, but allow the main CSV for Railway)
+# Note: hubspot-crm-exports-all-deals-2025-11-28.csv is tracked for deployment
+
+# Ruby/Rails
+.bundle/
+vendor/bundle/
+
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+tmp/
+temp/
+

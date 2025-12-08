@@ -1,0 +1,16 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+restartPolicyType = "never"
+
+[env]
+# Set these in Railway dashboard
+# SIMPRO_TEST_URL
+# SIMPRO_TEST_KEY_ID
+# HUBSPOT_ACCESS_TOKEN
+# CSV_FILE (optional)
+# LIMIT (optional)
+# START_FROM (optional)
+
