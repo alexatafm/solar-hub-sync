@@ -1,7 +1,6 @@
 [build]
 builder = "dockerfile"
 dockerfilePath = "Dockerfile"
-buildArgs = { GITHUB_TOKEN = "${{GITHUB_TOKEN}}" }
 
 [deploy]
 restartPolicyType = "never"
