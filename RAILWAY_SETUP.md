@@ -92,7 +92,22 @@ SIMPRO_TEST_KEY_ID=your_api_key_here
 HUBSPOT_ACCESS_TOKEN=your_token_here
 RAILS_ENV=production
 SECRET_KEY_BASE=any_random_string
+GITHUB_TOKEN=ghp_your_github_personal_access_token
 ```
+
+**⚠️ Important:** `GITHUB_TOKEN` is required to clone the private `FileroomProjects/solar-hub-simpro` repository.
+
+#### How to Create GitHub Personal Access Token:
+
+1. **Go to:** https://github.com/settings/tokens
+2. **Click:** "Generate new token (classic)"
+3. **Name:** `Railway Sync Deployment`
+4. **Expiration:** No expiration (or 1 year+)
+5. **Scopes:** Check `repo` (Full control of private repositories)
+6. **Generate** and copy the token (starts with `ghp_`)
+7. **Add to Railway** Variables tab: `GITHUB_TOKEN=ghp_...`
+
+**Note:** The token is only used during Docker build to clone the repo. It's not stored in the final image.
 
 ---
 

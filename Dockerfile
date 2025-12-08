@@ -17,7 +17,9 @@ RUN apk add --no-cache \
     git
 
 # Clone the main Rails application for model access
-RUN git clone --depth 1 https://github.com/FileroomProjects/solar-hub-simpro.git /app
+# Requires GITHUB_TOKEN environment variable to be set in Railway
+ARG GITHUB_TOKEN
+RUN git clone --depth 1 https://${GITHUB_TOKEN}@github.com/FileroomProjects/solar-hub-simpro.git /app
 
 WORKDIR /app
 
