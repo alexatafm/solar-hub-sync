@@ -84,7 +84,44 @@ class JobsSync
       @stats[:total_jobs] = jobs.count
       
       jobs.each_with_index do |job, index|
-        @logger.info "Processing job #{index + 1}/#{jobs.count}: #{job['ID']} - #{job['Name']}"
+        # Enhanced progress logging for large syncs
+        current = index + 1
+        total = jobs.count
+        percent = ((current.to_f / total) * 100).round(2)
+        
+        # Milestone logging for major progress points
+        if [100, 500, 1000, 5000, 10000, 25000, 50000].include?(current)
+          @logger.info ""
+          @logger.info "🎯" * 40
+          @logger.info "🎉 MILESTONE REACHED: #{current} JOBS PROCESSED!"
+          @logger.info "🎯" * 40
+          @logger.info ""
+        end
+        
+        # Calculate time estimates every 10 jobs
+        if current % 10 == 0 || current == 1
+          elapsed = Time.now - start_time
+          rate = current / elapsed # jobs per second
+          remaining_jobs = total - current
+          eta_seconds = remaining_jobs / rate
+          eta_minutes = (eta_seconds / 60).round
+          eta_hours = (eta_seconds / 3600).round(1)
+          
+          @logger.info ""
+          @logger.info "━" * 80
+          @logger.info "📊 PROGRESS: #{current}/#{total} (#{percent}%)"
+          @logger.info "⏱️  Elapsed: #{(elapsed / 60).round} mins | Rate: #{(rate * 60).round(1)} jobs/min"
+          if eta_hours > 1
+            @logger.info "⏳ ETA: ~#{eta_hours} hours remaining (~#{eta_minutes} minutes)"
+          else
+            @logger.info "⏳ ETA: ~#{eta_minutes} minutes remaining"
+          end
+          @logger.info "✅ Created: #{@stats[:created]} | Updated: #{@stats[:updated]} | Failed: #{@stats[:failed]}"
+          @logger.info "━" * 80
+          @logger.info ""
+        end
+        
+        @logger.info "[#{current}/#{total}] Processing Job #{job['ID']}..."
         process_job(job)
       end
       
@@ -1159,25 +1196,38 @@ class JobsSync
   end
 
   def print_summary(duration)
+    total_processed = @stats[:created] + @stats[:updated] + @stats[:skipped] + @stats[:failed]
+    success_rate = total_processed > 0 ? ((@stats[:created] + @stats[:updated]).to_f / total_processed * 100).round(2) : 0
+    jobs_per_min = duration > 0 ? (total_processed.to_f / (duration / 60)).round(2) : 0
+    
     @logger.info ""
     @logger.info "=" * 80
-    @logger.info "Sync Summary"
+    @logger.info "🎉 SYNC COMPLETE - FINAL SUMMARY"
     @logger.info "=" * 80
-    @logger.info "Total Jobs: #{@stats[:total_jobs]}"
-    @logger.info "Created: #{@stats[:created]}"
-    @logger.info "Updated: #{@stats[:updated]}"
-    @logger.info "Skipped: #{@stats[:skipped]}"
-    @logger.info "Failed: #{@stats[:failed]}"
-    @logger.info "Duration: #{duration}s"
     @logger.info ""
-    @logger.info "Report saved to: #{@report_file}"
+    @logger.info "📊 RESULTS:"
+    @logger.info "   Total Jobs: #{@stats[:total_jobs]}"
+    @logger.info "   ✅ Created: #{@stats[:created]}"
+    @logger.info "   ✅ Updated: #{@stats[:updated]}"
+    @logger.info "   ⏭️  Skipped: #{@stats[:skipped]}"
+    @logger.info "   ❌ Failed: #{@stats[:failed]}"
+    @logger.info ""
+    @logger.info "⏱️  PERFORMANCE:"
+    @logger.info "   Duration: #{(duration / 60).round(2)} minutes (#{duration.round}s)"
+    @logger.info "   Rate: #{jobs_per_min} jobs/min"
+    @logger.info "   Success Rate: #{success_rate}%"
+    @logger.info ""
+    @logger.info "📄 Report saved to: #{@report_file}"
     @logger.info "=" * 80
     
     if @stats[:errors].any?
       @logger.info ""
-      @logger.info "Errors:"
-      @stats[:errors].each do |error|
-        @logger.error "Job #{error[:job_id]}: #{error[:error]}"
+      @logger.info "⚠️  ERRORS (#{@stats[:errors].count}):"
+      @stats[:errors].first(10).each do |error|
+        @logger.error "   Job #{error[:job_id]}: #{error[:error]}"
+      end
+      if @stats[:errors].count > 10
+        @logger.info "   ... and #{@stats[:errors].count - 10} more (see CSV report)"
       end
     end
   end
