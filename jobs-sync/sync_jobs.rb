@@ -263,21 +263,21 @@ class JobsSync
     data[:job_status] = job_response["Status"]["Name"] rescue nil
     data[:simpro_job_id] = job_response["ID"] rescue nil
     
-    # Extract site info early (needed for job name)
+    # Extract site info early (needed for job name fallback)
     data[:site] = job_response["Site"]["Name"] rescue nil
     data[:site_id] = job_response["Site"]["ID"] rescue nil
     
-    # Create job name in format: [Site ID] - "Name" (or Site Name as fallback)
+    # Create job name in format: [Job ID] - "Job Name" (or Site Name as fallback)
     # Priority: 1) Job Name, 2) Site Name, 3) "Unnamed"
     if present?(job_name)
-      # Use Job Name: [Site ID] - "Name"
-      data[:job_name] = "[#{data[:site_id]}] - #{job_name}"
+      # Use Job Name: [Job ID] - "Job Name"
+      data[:job_name] = "[#{data[:simpro_job_id]}] - #{job_name}"
     elsif present?(data[:site])
-      # Fallback to Site Name: [Site ID] - Site Name
-      data[:job_name] = "[#{data[:site_id]}] - #{data[:site]}"
+      # Fallback to Site Name: [Job ID] - Site Name
+      data[:job_name] = "[#{data[:simpro_job_id]}] - #{data[:site]}"
     else
-      # Last resort: [Site ID] - Unnamed
-      data[:job_name] = "[#{data[:site_id]}] - Unnamed"
+      # Last resort: [Job ID] - Unnamed
+      data[:job_name] = "[#{data[:simpro_job_id]}] - Unnamed"
     end
     
     # Map status to HubSpot pipeline stage
