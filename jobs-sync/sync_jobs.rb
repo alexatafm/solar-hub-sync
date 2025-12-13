@@ -734,7 +734,7 @@ class JobsSync
   
   def create_contact(customer_data, email)
     # Use email or generate placeholder
-    contact_email = email.present? ? email : "noemail+#{customer_data['ID']}@solarhub.com.au"
+    contact_email = present?(email) ? email : "noemail+#{customer_data['ID']}@solarhub.com.au"
     
     properties = {
       "email" => contact_email,
@@ -831,7 +831,7 @@ class JobsSync
   end
   
   def create_site(site_data)
-    site_name = site_data["Name"].present? ? site_data["Name"].strip : "No Site Name"
+    site_name = present?(site_data["Name"]) ? site_data["Name"].strip : "No Site Name"
     
     properties = {
       "site" => site_name,
