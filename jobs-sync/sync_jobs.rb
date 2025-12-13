@@ -242,6 +242,82 @@ class JobsSync
     
     response.success? ? response.parsed_response : nil
   end
+  
+  # Fetch job cost centres from all sections
+  def fetch_job_cost_centres(job_id)
+    cost_centre_names = []
+    
+    begin
+      # First, get all sections for this job
+      rate_limit_simpro
+      sections_response = HTTParty.get(
+        "#{@simpro_url}/jobs/#{job_id}/sections/",
+        headers: {
+          'Content-Type' => 'application/json',
+          'Authorization' => "Bearer #{@simpro_key}"
+        },
+        timeout: 30
+      )
+      
+      if sections_response.success? && present?(sections_response.parsed_response)
+        sections = sections_response.parsed_response
+        
+        # For each section, fetch its cost centres
+        sections.each do |section|
+          section_id = section["ID"] rescue nil
+          next unless present?(section_id)
+          
+          rate_limit_simpro
+          cc_response = HTTParty.get(
+            "#{@simpro_url}/jobs/#{job_id}/sections/#{section_id}/costCenters/",
+            headers: {
+              'Content-Type' => 'application/json',
+              'Authorization' => "Bearer #{@simpro_key}"
+            },
+            timeout: 30
+          )
+          
+          if cc_response.success? && present?(cc_response.parsed_response)
+            cc_response.parsed_response.each do |cc|
+              cc_name = cc.dig("CostCenter", "Name") rescue nil
+              cost_centre_names << cc_name if present?(cc_name)
+            end
+          end
+        end
+      end
+      
+      # Map to HubSpot allowed values
+      map_cost_centres_to_hubspot(cost_centre_names.uniq)
+    rescue => e
+      @logger.error "Error fetching cost centres for job #{job_id}: #{e.message}"
+      nil
+    end
+  end
+  
+  # Map Simpro cost centre names to HubSpot multi-select options
+  COST_CENTRE_MAPPING = {
+    "Air Conditioning" => "Air Conditioning",
+    "Commercial Solar" => "Commercial Solar",
+    "Domestic Solar" => "Domestic Solar",
+    "Domestic Solar & Batteries" => "Domestic Solar & Batteries",
+    "Energy Management & Upgrades" => "Energy Management & Upgrades",
+    "EV Charging" => "EV Charging",
+    "Hot Water" => "Hot Water",
+    "Induction Cooktops" => "Induction Cooktops",
+    "NSW Emerging Energy Program (DO NOT USE)" => "NSW Emerging Energy Program (DO NOT USE)",
+    "Service & Support" => "Service & Support",
+    "Wholesale" => "Wholesale"
+  }.freeze
+  
+  def map_cost_centres_to_hubspot(simpro_names)
+    return nil if simpro_names.empty?
+    
+    # Map each Simpro name to HubSpot value
+    mapped = simpro_names.map { |name| COST_CENTRE_MAPPING[name] }.compact
+    
+    # Return as semicolon-separated string for HubSpot multi-select
+    mapped.any? ? mapped.join(";") : nil
+  end
 
   # Helper method to check if value is present (replaces Rails' .present?)
   def present?(value)
@@ -353,16 +429,20 @@ class JobsSync
     
     # Category 5: Job Origin & Relationships
     data[:converted_quote_id] = job_response["ConvertedFromQuote"]["ID"] rescue nil
-    data[:date_converted_quote] = job_response["ConvertedFromQuote"]["DateConverted"] rescue nil
+    
+    # Date Converted and Converted From Quote boolean
+    if present?(job_response["ConvertedFrom"])
+      data[:date_converted_quote] = job_response["ConvertedFrom"]["Date"] rescue nil
+      data[:converted_from_quote] = (job_response["ConvertedFrom"]["Type"] == "Quote") rescue false
+    end
     
     # Discounted Price from converted quote (Inc GST)
     data[:discounted_price_inc_gst] = job_response["ConvertedFromQuote"]["Total"]["IncTax"] rescue nil
     
-    # Job Cost Centres - extract default/primary cost centre name
-    if present?(job_response["CostCenters"]) && job_response["CostCenters"].is_a?(Array) && job_response["CostCenters"].any?
-      # Get the first/primary cost centre or join all if multiple
-      cost_centre_names = job_response["CostCenters"].map { |cc| cc["Name"] }.compact
-      data[:job_cost_centres] = cost_centre_names.join(", ") if cost_centre_names.any?
+    # Fetch Job Cost Centres from sections (multi-select)
+    simpro_job_id = job_response["ID"]
+    if present?(simpro_job_id)
+      data[:job_cost_centres] = fetch_job_cost_centres(simpro_job_id)
     end
     
     # Category 6: Custom Fields
@@ -505,6 +585,8 @@ class JobsSync
     
     # Relationships
     properties["converted_quote_id"] = job_data[:converted_quote_id].to_s if present?(job_data[:converted_quote_id])
+    properties["date_converted_quote"] = format_date_for_hubspot(job_data[:date_converted_quote]) if present?(job_data[:date_converted_quote])
+    properties["converted_from_quote"] = job_data[:converted_from_quote].to_s if job_data.key?(:converted_from_quote)
     properties["discounted_price_inc_gst"] = job_data[:discounted_price_inc_gst].to_f if present?(job_data[:discounted_price_inc_gst])
     properties["job_cost_centres"] = job_data[:job_cost_centres] if present?(job_data[:job_cost_centres])
     
