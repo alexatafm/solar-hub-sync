@@ -442,7 +442,7 @@ class JobsSync
     # Fetch Job Cost Centres from sections (multi-select)
     simpro_job_id = job_response["ID"]
     if present?(simpro_job_id)
-      data[:job_cost_centres] = fetch_job_cost_centres(simpro_job_id)
+      data[:job_costcentres] = fetch_job_cost_centres(simpro_job_id)
     end
     
     # Category 6: Custom Fields
@@ -588,7 +588,9 @@ class JobsSync
     properties["date_converted_quote"] = format_date_for_hubspot(job_data[:date_converted_quote]) if present?(job_data[:date_converted_quote])
     properties["converted_from_quote"] = job_data[:converted_from_quote].to_s if job_data.key?(:converted_from_quote)
     properties["discounted_price_inc_gst"] = job_data[:discounted_price_inc_gst].to_f if present?(job_data[:discounted_price_inc_gst])
-    properties["job_cost_centres"] = job_data[:job_cost_centres] if present?(job_data[:job_cost_centres])
+    
+    # Job Cost Centres (multi-select)
+    properties["job_costcentres"] = job_data[:job_costcentres] if present?(job_data[:job_costcentres])
     
     # Custom Fields
     properties["region"] = job_data[:region] if present?(job_data[:region])
