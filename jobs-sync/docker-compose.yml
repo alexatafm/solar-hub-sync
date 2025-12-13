@@ -1,0 +1,30 @@
+services:
+  job-sync:
+    build: .
+    container_name: solarhub-job-sync
+    env_file:
+      - .env
+    volumes:
+      # Mount logs and reports for easy access
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    command: ruby sync_jobs.rb
+    restart: "no"  # Don't auto-restart - one-time job
+
+  # Test service - configurable number of jobs for testing
+  job-sync-test:
+    build: .
+    container_name: solarhub-job-sync-test
+    env_file:
+      - .env
+    environment:
+      - TEST_MODE=true
+      - MAX_JOBS=${MAX_JOBS:-5}  # Default 5 jobs, override with MAX_JOBS env var
+    volumes:
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    command: ruby test_sync.rb
+    restart: "no"
+    profiles:
+      - test  # Only run when explicitly requested
+

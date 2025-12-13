@@ -563,105 +563,343 @@ class JobsSync
   # === ASSOCIATION METHODS ===
   
   def associate_job_with_related_records(hubspot_job_id, job_response)
-    # TEMPORARY: Associations disabled due to HubSpot API issues
-    # Re-enable after troubleshooting with HubSpot support
-    @logger.info "ℹ️  Associations temporarily disabled - will be enabled after API troubleshooting"
-    return
+    @logger.info "🔗 Creating associations for job #{hubspot_job_id}..."
     
-    # Get Simpro IDs for customer and site
-    customer_id = job_response.dig("Customer", "ID") rescue nil
-    site_id = job_response.dig("Site", "ID") rescue nil
-    customer_email = job_response.dig("Customer", "ContactPerson", "Email") || 
-                     job_response.dig("Customer", "Email") rescue nil
-    
-    # Associate with contact (customer)
-    if present?(customer_email)
-      associate_contact(hubspot_job_id, customer_email, customer_id)
-    elsif present?(customer_id)
-      @logger.warn "No email found for customer #{customer_id}, cannot associate contact"
+    # 1. Associate Contact (Customer)
+    contact_id = find_or_create_contact(job_response)
+    if contact_id
+      associate_contact_to_job(hubspot_job_id, contact_id)
+    else
+      @logger.warn "No contact found/created for job #{hubspot_job_id}"
     end
     
-    # Associate with site
-    if present?(site_id)
-      associate_site(hubspot_job_id, site_id)
+    # 2. Associate Site
+    site_id = find_or_create_site(job_response)
+    if site_id
+      associate_site_to_job(hubspot_job_id, site_id)
+    else
+      @logger.warn "No site found/created for job #{hubspot_job_id}"
     end
+    
+    # 3. Associate Deal (from converted quote)
+    deal_id = find_deal_by_quote_id(job_response)
+    if deal_id
+      associate_deal_to_job(hubspot_job_id, deal_id)
+    else
+      @logger.debug "No deal found for job #{hubspot_job_id} (no converted quote or deal not in HubSpot)"
+    end
+  rescue => e
+    @logger.error "Error in associations for job #{hubspot_job_id}: #{e.message}"
   end
   
-  def associate_contact(job_id, customer_email, simpro_customer_id = nil)
-    # Search for contact by email
-    contact_id = search_contact_by_email(customer_email)
+  # Find or create contact in HubSpot from Simpro customer data
+  def find_or_create_contact(job_response)
+    return nil unless present?(job_response["Customer"])
     
-    if !contact_id && present?(simpro_customer_id)
-      # Try searching by simpro customer ID
-      contact_id = search_contact_by_simpro_id(simpro_customer_id)
+    customer = job_response["Customer"]
+    simpro_customer_id = customer["ID"] rescue nil
+    
+    return nil unless present?(simpro_customer_id)
+    
+    # Search by Simpro Customer ID first
+    contact_id = search_contact_by_simpro_id(simpro_customer_id)
+    return contact_id if contact_id
+    
+    # Fetch full customer details from Simpro if needed
+    @logger.info "📞 Contact not found in HubSpot, fetching from Simpro..."
+    rate_limit_simpro
+    
+    customer_response = with_retry do
+      HTTParty.get(
+        "#{@simpro_url}/customers/#{simpro_customer_id}",
+        headers: {
+          'Content-Type' => 'application/json',
+          'Authorization' => "Bearer #{@simpro_key}"
+        },
+        timeout: 30
+      )
     end
     
-    if contact_id
-      # Create association using HubSpot v4 API
-      body_json = [
-        {
-          "associationCategory": "USER_DEFINED",
-          "associationTypeId": 60  # Job to Contact association type
-        }
-      ]
-      
-      rate_limit_hubspot
-      response = HTTParty.put(
-        "https://api.hubapi.com/crm/v4/objects/p_jobs/#{job_id}/associations/contacts/#{contact_id}",
-        body: body_json.to_json,
+    unless customer_response.success?
+      @logger.error "Failed to fetch customer #{simpro_customer_id} from Simpro"
+      return nil
+    end
+    
+    customer_data = customer_response.parsed_response
+    
+    # Extract email for contact creation
+    email = customer_data.dig("ContactPerson", "Email") || customer_data["Email"] rescue nil
+    
+    # If we have email, search by email too
+    if present?(email)
+      contact_id = search_contact_by_email(email)
+      if contact_id
+        # Update with Simpro ID and return
+        update_contact_simpro_id(contact_id, simpro_customer_id)
+        return contact_id
+      end
+    end
+    
+    # Create new contact
+    create_contact(customer_data, email)
+  rescue => e
+    @logger.error "Error in find_or_create_contact: #{e.message}"
+    nil
+  end
+  
+  def create_contact(customer_data, email)
+    # Use email or generate placeholder
+    contact_email = email.present? ? email : "noemail+#{customer_data['ID']}@solarhub.com.au"
+    
+    properties = {
+      "email" => contact_email,
+      "firstname" => customer_data.dig("ContactPerson", "GivenName") || customer_data["GivenName"] || "",
+      "lastname" => customer_data.dig("ContactPerson", "FamilyName") || customer_data["FamilyName"] || "Unknown",
+      "phone" => customer_data.dig("ContactPerson", "Phone") || customer_data["Phone"] || "",
+      "mobilephone" => customer_data.dig("ContactPerson", "CellPhone") || customer_data["CellPhone"] || "",
+      "simpro_customer_id" => customer_data["ID"].to_s
+    }
+    
+    rate_limit_hubspot
+    response = with_retry do
+      HTTParty.post(
+        "https://api.hubapi.com/crm/v3/objects/contacts",
+        body: { properties: properties }.to_json,
         headers: {
           'Content-Type' => 'application/json',
           'Authorization' => "Bearer #{@hubspot_token}"
         },
         timeout: 30
       )
-      
-      if response.success?
-        @logger.info "✅ Associated contact #{contact_id} with job #{job_id}"
-      else
-        @logger.warn "Failed to associate contact: #{response.code} - #{response.body[0..200]}"
-      end
+    end
+    
+    if response.success?
+      contact_id = response.parsed_response["id"]
+      @logger.info "✅ Created new contact #{contact_id} with Simpro ID: #{customer_data['ID']}"
+      contact_id
     else
-      @logger.warn "No contact found for email #{customer_email}"
+      @logger.error "Failed to create contact: #{response.code} - #{response.body[0..200]}"
+      nil
+    end
+  rescue => e
+    @logger.error "Error creating contact: #{e.message}"
+    nil
+  end
+  
+  def update_contact_simpro_id(contact_id, simpro_customer_id)
+    rate_limit_hubspot
+    response = HTTParty.patch(
+      "https://api.hubapi.com/crm/v3/objects/contacts/#{contact_id}",
+      body: { properties: { "simpro_customer_id" => simpro_customer_id.to_s } }.to_json,
+      headers: {
+        'Content-Type' => 'application/json',
+        'Authorization' => "Bearer #{@hubspot_token}"
+      },
+      timeout: 30
+    )
+    
+    if response.success?
+      @logger.info "✅ Updated contact #{contact_id} with Simpro ID: #{simpro_customer_id}"
+    end
+  rescue => e
+    @logger.error "Error updating contact Simpro ID: #{e.message}"
+  end
+  
+  # Find or create site in HubSpot from Simpro site data
+  def find_or_create_site(job_response)
+    return nil unless present?(job_response["Site"])
+    
+    simpro_site_id = job_response["Site"]["ID"] rescue nil
+    return nil unless present?(simpro_site_id)
+    
+    # Search by Simpro Site ID first
+    site_id = search_site_by_simpro_id(simpro_site_id)
+    return site_id if site_id
+    
+    # Fetch full site details from Simpro if needed
+    @logger.info "🏠 Site not found in HubSpot, fetching from Simpro..."
+    rate_limit_simpro
+    
+    site_response = with_retry do
+      HTTParty.get(
+        "#{@simpro_url}/sites/#{simpro_site_id}",
+        headers: {
+          'Content-Type' => 'application/json',
+          'Authorization' => "Bearer #{@simpro_key}"
+        },
+        timeout: 30
+      )
+    end
+    
+    unless site_response.success?
+      @logger.error "Failed to fetch site #{simpro_site_id} from Simpro"
+      return nil
+    end
+    
+    site_data = site_response.parsed_response
+    
+    # Create new site
+    create_site(site_data)
+  rescue => e
+    @logger.error "Error in find_or_create_site: #{e.message}"
+    nil
+  end
+  
+  def create_site(site_data)
+    site_name = site_data["Name"].present? ? site_data["Name"].strip : "No Site Name"
+    
+    properties = {
+      "site" => site_name,
+      "site_name" => site_name,
+      "address" => site_data.dig("Address", "Address") || "",
+      "suburb" => site_data.dig("Address", "City") || "",
+      "state" => site_data.dig("Address", "State") || "",
+      "postcode" => site_data.dig("Address", "PostalCode") || "",
+      "country" => site_data.dig("Address", "Country") || "Australia",
+      "simpro_site_id" => site_data["ID"].to_s
+    }
+    
+    rate_limit_hubspot
+    response = with_retry do
+      HTTParty.post(
+        "https://api.hubapi.com/crm/v3/objects/p_sites",
+        body: { properties: properties }.to_json,
+        headers: {
+          'Content-Type' => 'application/json',
+          'Authorization' => "Bearer #{@hubspot_token}"
+        },
+        timeout: 30
+      )
+    end
+    
+    if response.success?
+      site_id = response.parsed_response["id"]
+      @logger.info "✅ Created new site #{site_id} (#{site_name}) with Simpro ID: #{site_data['ID']}"
+      site_id
+    else
+      @logger.error "Failed to create site: #{response.code} - #{response.body[0..200]}"
+      nil
+    end
+  rescue => e
+    @logger.error "Error creating site: #{e.message}"
+    nil
+  end
+  
+  # Create association between job and contact using default association endpoint
+  # Association Type ID: 67
+  def associate_contact_to_job(job_id, contact_id)
+    rate_limit_hubspot
+    response = HTTParty.put(
+      "https://api.hubapi.com/crm/v4/objects/p_jobs/#{job_id}/associations/default/contacts/#{contact_id}",
+      headers: {
+        'Content-Type' => 'application/json',
+        'Authorization' => "Bearer #{@hubspot_token}"
+      },
+      timeout: 30
+    )
+    
+    if response.success?
+      @logger.info "✅ Associated contact #{contact_id} with job #{job_id}"
+      true
+    else
+      @logger.warn "Failed to associate contact: #{response.code} - #{response.body[0..200]}"
+      false
     end
   rescue => e
     @logger.error "Error associating contact: #{e.message}"
+    false
   end
   
-  def associate_site(job_id, simpro_site_id)
-    # Search for site by simpro_site_id
-    site_id = search_site_by_simpro_id(simpro_site_id)
+  # Create association between job and site using default association endpoint  
+  # Association Type ID: 104 (Work Location)
+  def associate_site_to_job(job_id, site_id)
+    rate_limit_hubspot
+    response = HTTParty.put(
+      "https://api.hubapi.com/crm/v4/objects/p_jobs/#{job_id}/associations/default/p_sites/#{site_id}",
+      headers: {
+        'Content-Type' => 'application/json',
+        'Authorization' => "Bearer #{@hubspot_token}"
+      },
+      timeout: 30
+    )
     
-    if site_id
-      # Create association using HubSpot v4 API
-      body_json = [
-        {
-          "associationCategory": "USER_DEFINED",
-          "associationTypeId": 61  # Job to Site association type
-        }
-      ]
-      
-      rate_limit_hubspot
-      response = HTTParty.put(
-        "https://api.hubapi.com/crm/v4/objects/p_jobs/#{job_id}/associations/p_sites/#{site_id}",
-        body: body_json.to_json,
-        headers: {
-          'Content-Type' => 'application/json',
-          'Authorization' => "Bearer #{@hubspot_token}"
-        },
-        timeout: 30
-      )
-      
-      if response.success?
-        @logger.info "✅ Associated site #{site_id} with job #{job_id}"
-      else
-        @logger.warn "Failed to associate site: #{response.code} - #{response.body[0..200]}"
-      end
+    if response.success?
+      @logger.info "✅ Associated site #{site_id} with job #{job_id}"
+      true
     else
-      @logger.warn "No site found for Simpro Site ID #{simpro_site_id}"
+      @logger.warn "Failed to associate site: #{response.code} - #{response.body[0..200]}"
+      false
     end
   rescue => e
     @logger.error "Error associating site: #{e.message}"
+    false
+  end
+  
+  # Create association between job and deal
+  # Association Type ID: 63
+  def associate_deal_to_job(job_id, deal_id)
+    rate_limit_hubspot
+    response = HTTParty.put(
+      "https://api.hubapi.com/crm/v4/objects/p_jobs/#{job_id}/associations/default/deals/#{deal_id}",
+      headers: {
+        'Content-Type' => 'application/json',
+        'Authorization' => "Bearer #{@hubspot_token}"
+      },
+      timeout: 30
+    )
+    
+    if response.success?
+      @logger.info "✅ Associated deal #{deal_id} with job #{job_id}"
+      true
+    else
+      @logger.warn "Failed to associate deal: #{response.code} - #{response.body[0..200]}"
+      false
+    end
+  rescue => e
+    @logger.error "Error associating deal: #{e.message}"
+    false
+  end
+  
+  # Find deal by Simpro quote ID
+  def find_deal_by_quote_id(job_response)
+    quote_id = job_response.dig("ConvertedFromQuote", "ID") rescue nil
+    return nil unless present?(quote_id)
+    
+    body_json = {
+      "filterGroups" => [
+        {
+          "filters" => [
+            {
+              "propertyName" => "simpro_quote_id",
+              "operator" => "EQ",
+              "value" => quote_id.to_s
+            }
+          ]
+        }
+      ]
+    }
+    
+    rate_limit_hubspot
+    response = HTTParty.post(
+      "https://api.hubapi.com/crm/v3/objects/deals/search",
+      body: body_json.to_json,
+      headers: {
+        'Content-Type' => 'application/json',
+        'Authorization' => "Bearer #{@hubspot_token}"
+      },
+      timeout: 30
+    )
+    
+    if response.success? && present?(response["results"])
+      deal_id = response["results"].first["id"]
+      @logger.info "📋 Found deal #{deal_id} for quote #{quote_id}"
+      deal_id
+    else
+      nil
+    end
+  rescue => e
+    @logger.error "Error searching for deal: #{e.message}"
+    nil
   end
   
   def search_contact_by_email(email)

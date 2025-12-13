@@ -1,0 +1,59 @@
+# Git
+.git
+.gitignore
+
+# Environment
+.env
+.env.*
+
+# Logs and reports (generated at runtime)
+*.log
+logs/
+reports/
+jobs_sync_report_*.csv
+
+# Documentation
+README.md
+DEPLOYMENT.md
+QUICK_START.md
+PROJECT_SUMMARY.md
+DOCKER_SETUP.md
+
+# Ruby
+*.gem
+*.rbc
+.bundle
+.config
+coverage
+InstalledFiles
+lib/bundler/man
+pkg
+rdoc
+spec/reports
+test/tmp
+test/version_tmp
+tmp
+
+# Editors
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
+Dockerfile
+
+# Test files
+test_calculation.rb
+test_data_extraction.rb
+test_single_job_local.rb
+
+# Setup scripts
+setup.sh
+

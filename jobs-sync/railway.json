@@ -1,0 +1,10 @@
+{
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "ruby sync_jobs.rb",
+    "restartPolicyType": "never"
+  }
+}
+

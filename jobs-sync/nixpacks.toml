@@ -1,0 +1,9 @@
+[phases.setup]
+nixPkgs = ["ruby_3_3"]
+
+[phases.install]
+cmds = ["bundle install"]
+
+[start]
+cmd = "ruby sync_jobs.rb"
+
