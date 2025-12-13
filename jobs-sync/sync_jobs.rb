@@ -15,6 +15,18 @@ rescue LoadError
 end
 
 class JobsSync
+  # Australian State Abbreviation Mapping
+  STATE_ABBREVIATIONS = {
+    "New South Wales" => "NSW",
+    "Australian Capital Territory" => "ACT",
+    "Victoria" => "VIC",
+    "Queensland" => "QLD",
+    "South Australia" => "SA",
+    "Western Australia" => "WA",
+    "Tasmania" => "TAS",
+    "Northern Territory" => "NT"
+  }.freeze
+  
   # HubSpot Pipeline Stage Mapping
   PIPELINE_STAGES = {
     "Quote Accepted" => "1654704594",
@@ -870,12 +882,16 @@ class JobsSync
   def create_site(site_data)
     site_name = present?(site_data["Name"]) ? site_data["Name"].strip : "No Site Name"
     
+    # Map state to abbreviation if needed
+    state_full = site_data.dig("Address", "State") || ""
+    state_abbrev = STATE_ABBREVIATIONS[state_full] || state_full
+    
     properties = {
       "site" => site_name,
       "site_name" => site_name,
       "address" => site_data.dig("Address", "Address") || "",
       "suburb" => site_data.dig("Address", "City") || "",
-      "state" => site_data.dig("Address", "State") || "",
+      "state" => state_abbrev,
       "postcode" => site_data.dig("Address", "PostalCode") || "",
       "country" => site_data.dig("Address", "Country") || "Australia",
       "simpro_site_id" => site_data["ID"].to_s
